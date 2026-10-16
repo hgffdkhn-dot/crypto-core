@@ -46,7 +46,7 @@ class AppContainer(context: Context) {
 
     init {
         // 用 Default 派发器在后台收集，避免主线程 I/O
-        kotlinx.coroutines.flow.launchInScope(settings.host) { currentHost = it }
+        settings.host.launchInScope { currentHost = it }
     }
 
     val repository: ChatRepository by lazy {

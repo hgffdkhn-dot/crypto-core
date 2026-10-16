@@ -178,12 +178,34 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # ⚠️ 必须用 v4（或给 v3 显式传 packages）。
+      # v3 的 packages 默认值是 `tools platform-tools`，而 Google 已把 legacy `tools` 包
+      # 从 SDK 仓库下架，新版 cmdline-tools 下 sdkmanager 直接以退出码 1 失败：
+      #   Warning: Failed to find package 'tools'
+      # v4 的默认值已移除 tools，且显式请求时也只告警不再失败。
+      # 这里再显式声明一次 packages，双保险。
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
 
-      # setup-android 只装包；显式接受一次 SDK 许可，避免 "Failed to install the following SDK components" 类失败。
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+      # 显式安装编译所需的 platform / build-tools。
+      # 两个易踩的坑：
+      #  1. 包名里的分号 `;` 是 shell 元字符，不加引号会被拆成两条命令 → Failed to find package 'platforms'
+      #  2. 不要再用 `yes | sdkmanager --licenses`：新版 sdkmanager 已废弃该参数（"no longer needed"），
+      #     且在 `set -eo pipefail` 下 `yes |` 会因 SIGPIPE 返回 141
+      - name: Install Android platform and build-tools
+        run: |
+          set -eu
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SM="$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          if [ -z "$SM" ]; then echo "::error::sdkmanager not found under $SDK"; exit 1; fi
+          echo "sdkmanager: $SM"
+          "$SM" --install "platforms;android-34" "build-tools;34.0.0"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
         run: |
