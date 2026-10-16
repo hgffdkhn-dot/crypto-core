@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.enchat.app.data.SettingsStore
 import com.enchat.app.data.local.ContactEntity
 import com.enchat.app.data.local.ConversationEntity
+import com.enchat.app.data.local.FriendRequestEntity
 import com.enchat.app.data.local.MessageEntity
 import com.enchat.app.repo.ChatRepository
 import com.enchat.clientcore.ConversationResolver
@@ -55,20 +56,30 @@ class AuthViewModel(private val repo: ChatRepository) : ViewModel() {
         }
         viewModelScope.launch {
             _busy.value = true
-            runCatching { repo.register(username, password, nickname.ifBlank { username }) }
-                .onSuccess { _done.value = true }
-                .onFailure { _error.value = it.message ?: "注册失败" }
-            _busy.value = false
+            // ⚠️ 不能用 runCatching { suspendFun() }：runCatching 的 lambda 不是 suspend 的，
+            // 编译期直接报 "suspend function should be called only from a coroutine"。
+            try {
+                repo.register(username, password, nickname.ifBlank { username })
+                _done.value = true
+            } catch (e: Exception) {
+                _error.value = e.message ?: "注册失败"
+            } finally {
+                _busy.value = false
+            }
         }
     }
 
     fun login(username: String, password: String) {
         viewModelScope.launch {
             _busy.value = true
-            runCatching { repo.login(username, password) }
-                .onSuccess { _done.value = true }
-                .onFailure { _error.value = it.message ?: "登录失败" }
-            _busy.value = false
+            try {
+                repo.login(username, password)
+                _done.value = true
+            } catch (e: Exception) {
+                _error.value = e.message ?: "登录失败"
+            } finally {
+                _busy.value = false
+            }
         }
     }
 }
@@ -98,24 +109,31 @@ class ConversationsViewModel(
     private val _query = MutableStateFlow("")
     val query: StateFlow<String> = _query.asStateFlow()
 
-    val entries: StateFlow<List<UiEntry>> = combine(
+    // 显式写出 combine 的泛型与 associate 的 Map 类型：
+    // 一旦上游实体（ConversationEntity 等）解析失败，这里会直接报出**实体名**，
+    // 而不是退化成难以定位的 "Not enough information to infer type variable K"。
+    val entries: StateFlow<List<UiEntry>> = combine<
+        List<ConversationEntity>, List<ContactEntity>, Set<Long>, List<UiEntry>
+    >(
         repo.observeConversations(),
         repo.observeContacts(),
         repo.e2eeEnabledUids
     ) { conversations, contacts, enabled ->
-        val sessions = conversations.associate { c ->
-            (c.peerUid to c.mode) to ConversationResolver.SessionSummary(
-                lastMessageAt = c.lastMessageAt,
-                lastPreview = c.lastPreview,
-                unread = c.unread
-            )
-        }
+        val sessions: Map<Pair<Long, Int>, ConversationResolver.SessionSummary> =
+            conversations.associate { c ->
+                (c.peerUid to c.mode) to ConversationResolver.SessionSummary(
+                    lastMessageAt = c.lastMessageAt,
+                    lastPreview = c.lastPreview,
+                    unread = c.unread
+                )
+            }
         val list = ConversationResolver.resolve(
             contacts = contacts.map { ConversationResolver.Contact(it.uid, it.nickname, it.avatarUrl, it.signature) },
             e2eeEnabledUids = enabled,
             sessions = sessions
         )
-        val localIdByKey = conversations.associate { (it.peerUid to it.mode) to it.id }
+        val localIdByKey: Map<Pair<Long, Int>, Long> =
+            conversations.associate { (it.peerUid to it.mode) to it.id }
         list.map { e ->
             UiEntry(
                 peerUid = e.peerUid,
@@ -244,7 +262,7 @@ class ContactsViewModel(private val repo: ChatRepository) : ViewModel() {
     val contacts: StateFlow<List<ContactEntity>> =
         repo.observeContacts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val requests: StateFlow<List<com.enchat.app.data.local.FriendRequestEntity>> =
+    val requests: StateFlow<List<FriendRequestEntity>> =
         repo.observeRequests().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _searchUid = MutableStateFlow("")
@@ -265,9 +283,11 @@ class ContactsViewModel(private val repo: ChatRepository) : ViewModel() {
             return
         }
         viewModelScope.launch {
-            runCatching { repo.findUser(uid) }
-                .onSuccess { json -> _found.value = uid to json.optString("nickname") }
-                .onFailure { _error.value = "未找到该用户" }
+            try {
+                _found.value = uid to repo.findUser(uid).optString("nickname")
+            } catch (e: Exception) {
+                _error.value = e.message ?: "未找到该用户"
+            }
         }
     }
 
@@ -308,9 +328,12 @@ class SettingsViewModel(
 
     fun saveProfile(nickname: String, signature: String) {
         viewModelScope.launch {
-            runCatching { repo.updateProfile(nickname, signature) }
-                .onSuccess { _message.value = "已保存" }
-                .onFailure { _message.value = it.message }
+            _message.value = try {
+                repo.updateProfile(nickname, signature)
+                "已保存"
+            } catch (e: Exception) {
+                e.message ?: "保存失败"
+            }
         }
     }
 

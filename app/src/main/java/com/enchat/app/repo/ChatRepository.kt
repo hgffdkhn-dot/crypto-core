@@ -3,6 +3,7 @@ package com.enchat.app.repo
 import com.enchat.app.data.KeystoreVault
 import com.enchat.app.data.SettingsStore
 import com.enchat.app.data.local.AppDatabase
+import com.enchat.app.data.local.ContactEntity
 import com.enchat.app.data.local.ChatDao
 import com.enchat.app.data.local.ConversationEntity
 import com.enchat.app.data.local.E2eeSessionEntity
@@ -189,7 +190,7 @@ class ChatRepository(
     }
 
     suspend fun logout() {
-        runCatching { api.logout() }
+        try { api.logout() } catch (_: Exception) { /* 退出登录失败也要清本地 */ }
         ws.close()
         vault.wipe()
         settings.clearSession()
@@ -200,7 +201,7 @@ class ChatRepository(
     /** 页面销毁/进程退出前调用：关闭连接并擦除传输层密钥。 */
     fun close() {
         ws.close()
-        e2eeSessions.values.forEach { runCatching { it } }
+        // 只丢弃内存中的会话引用；链状态已持久化在库中，退出登录时会随 clearAll() 删除
         e2eeSessions.clear()
     }
 
@@ -236,9 +237,11 @@ class ChatRepository(
                 Triple(identity, signedPreKey!!, oneTimePreKeys.toList())
             } else null
         } ?: return
-        runCatching {
+        try {
             api.uploadKeys(upload.first, upload.second, upload.third)
             pendingUpload = null
+        } catch (e: Exception) {
+            _authError.value = "密钥上传失败：${e.message}"
         }
     }
 
@@ -414,7 +417,7 @@ class ChatRepository(
     suspend fun markConversationRead(localId: Long) = dao.markRead(localId)
 
     fun observeConversations(): Flow<List<ConversationEntity>> = dao.observeConversations()
-    fun observeContacts(): Flow<List<com.enchat.app.data.local.ContactEntity>> = dao.observeContacts()
+    fun observeContacts(): Flow<List<ContactEntity>> = dao.observeContacts()
     fun observeRequests(): Flow<List<FriendRequestEntity>> = dao.observePendingRequests()
     fun observeMessages(localId: Long): Flow<List<MessageEntity>> = dao.observeMessages(localId)
 
@@ -531,7 +534,7 @@ class ChatRepository(
         for (i in 0 until arr.length()) {
             val f = arr.getJSONObject(i)
             dao.upsertContact(
-                com.enchat.app.data.local.ContactEntity(
+                ContactEntity(
                     uid = f.getLong("uid"),
                     nickname = f.optString("nickname"),
                     avatarUrl = f.optString("avatarUrl"),

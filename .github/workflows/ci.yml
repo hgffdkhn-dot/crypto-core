@@ -225,7 +225,19 @@ jobs:
       # Debug 构建使用占位公钥即可编译通过；
       # 若要产出可连真实服务器的 APK，请用仓库密钥注入 SERVER_*_PUB_B64。
       - name: Assemble debug APK
-        run: gradle :app:assembleDebug --no-daemon --console=plain
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug --no-daemon --console=plain 2>&1 | tee /tmp/android-build.log
+
+      # Kotlin 按文件顺序列出错误，而 `data/` 排在 `ui/` 之前 —— 真正的根因往往在
+      # 日志最前面，容易被 Gradle 的失败摘要顶掉。这里固定打印前 60 条。
+      - name: Print first Kotlin errors (root cause is usually at the top)
+        if: failure()
+        run: |
+          echo '======== 前 60 条 Kotlin 错误（根因通常在最前面） ========'
+          grep -E '^e: ' /tmp/android-build.log | head -60 || true
+          echo '======== 非 Kotlin 错误（依赖解析 / kapt / AGP） ========'
+          grep -E '^(w: |FAILURE|\* What went wrong|Could not |Failed to )' /tmp/android-build.log | head -40 || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
