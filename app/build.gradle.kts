@@ -56,14 +56,6 @@ android {
     }
 }
 
-// Room 导出 schema 的位置。注意：写在 gradle.properties 里是无效的（$projectDir 不会被插值），
-// 必须通过 kapt 的 annotation processor 参数传入。
-kapt {
-    arguments {
-        arg("room.schemaLocation", "$projectDir/schemas")
-    }
-}
-
 dependencies {
     implementation(project(":crypto-core"))
     implementation(project(":client-core"))

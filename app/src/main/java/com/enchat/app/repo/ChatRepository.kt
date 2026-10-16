@@ -10,6 +10,7 @@ import com.enchat.app.data.local.FriendRequestEntity
 import com.enchat.app.data.local.MessageEntity
 import com.enchat.app.data.local.MessageState
 import com.enchat.app.data.remote.ApiClient
+import com.enchat.app.data.remote.jsonObjectOf
 import com.enchat.app.data.remote.LinkState
 import com.enchat.app.data.remote.WsClient
 import com.enchat.clientcore.ConnectionStateMachine
@@ -165,7 +166,11 @@ class ChatRepository(
         selfUid = uid
         selfUserId = userId
         ensureIdentityUploaded()
-        ws.connect(JSONObject().put("token", token).put("protocolVersion", Protocol.VERSION).put("deviceId", deviceId()))
+        ws.connect(jsonObjectOf(
+            "token" to token,
+            "protocolVersion" to Protocol.VERSION,
+            "deviceId" to deviceId()
+        ))
         syncAfterReconnect()
     }
 
@@ -175,7 +180,11 @@ class ChatRepository(
         selfUserId = settings.selfUserId()
         if (selfUserId == 0L) return false
         restoreIdentityIfNeeded()
-        ws.connect(JSONObject().put("token", token).put("protocolVersion", Protocol.VERSION).put("deviceId", deviceId()))
+        ws.connect(jsonObjectOf(
+            "token" to token,
+            "protocolVersion" to Protocol.VERSION,
+            "deviceId" to deviceId()
+        ))
         return true
     }
 
@@ -263,7 +272,7 @@ class ChatRepository(
             if (e2ee) {
                 val session = ensureE2eeSession(peerUid)
                     ?: return failMessage(clientMsgId, "端到端会话未建立")
-                put("e2ee", JSONObject().put("ciphertext", Bytes.toBase64(session.encrypt(text.toByteArray(Charsets.UTF_8)))))
+                put("e2ee", jsonObjectOf("ciphertext" to Bytes.toBase64(session.encrypt(text.toByteArray(Charsets.UTF_8)))))
             } else {
                 put("text", text)
             }
@@ -309,7 +318,7 @@ class ChatRepository(
             put("conversationId", conversationIdOfLocal(conversationLocalId))
             put("kind", MessageKind.E2EE_INIT.code)
             put("clientMsgId", UUID.randomUUID().toString())
-            put("e2ee", JSONObject().put("ciphertext", Bytes.toBase64(init.toBytes())))
+            put("e2ee", jsonObjectOf("ciphertext" to Bytes.toBase64(init.toBytes())))
         })
         if (!sent) return false
 
@@ -350,24 +359,24 @@ class ChatRepository(
     // ---------------- 好友 ----------------
 
     suspend fun sendFriendRequest(uid: Long, message: String) {
-        ws.send(FrameType.FRIEND_REQUEST_SEND, JSONObject().put("toUid", uid).put("message", message))
+        ws.send(FrameType.FRIEND_REQUEST_SEND, jsonObjectOf("toUid" to uid, "message" to message))
     }
 
     suspend fun acceptFriendRequest(requestId: Long) {
-        ws.send(FrameType.FRIEND_ACCEPT, JSONObject().put("requestId", requestId))
+        ws.send(FrameType.FRIEND_ACCEPT, jsonObjectOf("requestId" to requestId))
     }
 
     suspend fun rejectFriendRequest(requestId: Long) {
-        ws.send(FrameType.FRIEND_REJECT, JSONObject().put("requestId", requestId))
+        ws.send(FrameType.FRIEND_REJECT, jsonObjectOf("requestId" to requestId))
     }
 
     suspend fun removeFriend(uid: Long) {
-        ws.send(FrameType.FRIEND_REMOVE, JSONObject().put("friendUid", uid))
+        ws.send(FrameType.FRIEND_REMOVE, jsonObjectOf("friendUid" to uid))
         dao.deleteContact(uid)
     }
 
     suspend fun refreshFriends() {
-        ws.send(FrameType.FRIEND_LIST, JSONObject())
+        ws.send(FrameType.FRIEND_LIST, jsonObjectOf())
     }
 
     suspend fun findUser(uid: Long): JSONObject = api.user(uid)
@@ -450,7 +459,12 @@ class ChatRepository(
 
         val conv = dao.conversation(peerUid, mode)
             ?: dao.upsertConversation(
-                ConversationEntity(peerUid = peerUid, mode = mode, title = Protocol.formatUid(peerUid))
+                ConversationEntity(
+                    peerUid = peerUid,
+                    mode = mode,
+                    title = Protocol.formatUid(peerUid),
+                    avatarUrl = ""
+                )
             ).let { dao.conversation(peerUid, mode) } ?: return
 
         if (dao.countServerMsg(payload.optLong("serverMsgId")) == 0) {
@@ -559,7 +573,7 @@ class ChatRepository(
 
     suspend fun syncAfterReconnect() {
         val seq = settings.lastSyncSeq.first()
-        ws.send(FrameType.SYNC_REQUEST, JSONObject().put("afterSeq", seq).put("limit", 200))
+        ws.send(FrameType.SYNC_REQUEST, jsonObjectOf("afterSeq" to seq, "limit" to 200))
         refreshFriends()
     }
 
@@ -568,7 +582,7 @@ class ChatRepository(
     private fun encodeOpks(keys: List<OneTimePreKey>): ByteArray {
         val json = org.json.JSONArray()
         keys.forEach { k ->
-            json.put(org.json.JSONObject().put("id", k.id).put("priv", Bytes.toBase64(k.privateKeyBytes())))
+            json.put(jsonObjectOf("id" to k.id, "priv" to Bytes.toBase64(k.privateKeyBytes())))
         }
         return json.toString().toByteArray(Charsets.UTF_8)
     }

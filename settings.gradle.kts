@@ -22,7 +22,17 @@ rootProject.name = "EnChat"
 include(":crypto-core")
 include(":client-core")
 include(":server")
-include(":app")
 
-// :app 需要 Android SDK；若本地无 SDK，可先只构建其余模块：
-//   gradle :crypto-core:build :client-core:build :server:test
+// :app 需要 Android SDK：配置阶段 AGP 就要定位 SDK，找不到会直接失败，
+// 进而连 :crypto-core / :server 这些纯 JVM 模块也一起构建不了。
+// 因此只在能定位到 SDK 时才纳入，纯 JVM 环境下自动跳过。
+val androidSdkDetected =
+    System.getenv("ANDROID_HOME") != null ||
+        System.getenv("ANDROID_SDK_ROOT") != null ||
+        rootDir.resolve("local.properties").exists()
+
+if (androidSdkDetected) {
+    include(":app")
+} else {
+    logger.lifecycle("跳过 :app（未检测到 Android SDK）。设置 ANDROID_HOME 或创建 local.properties 后可构建 Android 模块。")
+}
