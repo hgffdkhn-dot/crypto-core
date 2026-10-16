@@ -56,6 +56,14 @@ android {
     }
 }
 
+// Room 导出 schema 的位置。注意：写在 gradle.properties 里是无效的（$projectDir 不会被插值），
+// 必须通过 kapt 的 annotation processor 参数传入。
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     implementation(project(":crypto-core"))
     implementation(project(":client-core"))
@@ -86,6 +94,8 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    testImplementation(libs.junit.jupiter)
+    // ⚠️ Android 单元测试源集默认只支持 JUnit4；JUnit5 需额外引入 android-junit5 插件。
+    // 本模块暂无测试代码，先按 JUnit4 预留。
+    testImplementation(libs.junit4)
     testImplementation(project(":crypto-core"))
 }

@@ -1,7 +1,14 @@
 [versions]
-kotlin = "1.9.24"
+# ⚠️ 版本映射必须查官方对照表：
+#   https://developer.android.com/jetpack/androidx/releases/compose-kotlin
+# Kotlin 1.9.24 ↔ Compose Compiler 1.5.14
+# Kotlin 1.9.25 ↔ Compose Compiler 1.5.15   ← 本项目采用（1.5.15 明确 targeting 1.9.25）
+# 改 Kotlin 版本时务必同步改 composeCompiler，否则编译期报
+# "This version (x) of the Compose Compiler requires Kotlin version y"。
+kotlin = "1.9.25"
 bouncycastle = "1.78.1"
 junit = "5.10.2"
+junit4 = "4.13.2"
 gradle = "8.9"
 ktor = "2.3.12"
 json = "20240303"
@@ -14,7 +21,7 @@ coroutines = "1.8.1"
 # Android 客户端
 agp = "8.5.2"
 composeBom = "2024.06.00"
-composeCompiler = "1.5.15"
+composeCompiler = "1.5.15"   # 必须与上面的 kotlin 版本严格对应
 okhttp = "4.12.0"
 room = "2.6.1"
 datastore = "1.1.1"
@@ -27,6 +34,7 @@ coreKtx = "1.13.1"
 [libraries]
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
 
 # ---- Ktor 服务端 ----
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }

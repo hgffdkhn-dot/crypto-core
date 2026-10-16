@@ -1,6 +1,8 @@
-// 根项目：当前只做统一配置，不引入 Android/服务端插件（模块到位后再补）
+// 根项目：统一声明插件版本，子模块用 alias(...) 引用且不再写版本。
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.android.application) apply false
 }
 
 tasks.register<Delete>("cleanAll") {

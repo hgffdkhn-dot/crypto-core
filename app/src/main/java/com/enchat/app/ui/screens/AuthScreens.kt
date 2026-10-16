@@ -135,8 +135,8 @@ fun RegisterScreen(
         if (password.isNotEmpty()) {
             Column {
                 LinearProgressIndicator(
-                    progress = { (policy.score + 1) / 5f },
-                    modifier = Modifier.fillMaxWidth(),
+                    progress = (policy.score + 1) / 5f,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Text(
                     text = strengthLabel(policy.score),
