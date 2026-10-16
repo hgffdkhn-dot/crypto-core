@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">EnChat</string>
+
+    <!-- 连接状态 -->
+    <string name="conn_connecting">连接中…</string>
+    <string name="conn_waiting_network">正在等待网络…</string>
+
+    <!-- 端到端弹窗 -->
+    <string name="e2ee_intro_title">你已开启端到端聊天</string>
+    <string name="e2ee_intro_lead">以下功能将会得到加强：</string>
+</resources>

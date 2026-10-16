@@ -1,0 +1,21 @@
+.gradle/
+build/
+*/build/
+local.properties
+.idea/
+*.iml
+*.ipr
+*.iws
+.kotlin/
+
+# 沙盒离线构建用的本地依赖 jar（体积大，不入库；见 README「离线构建」）
+libs/
+libs2/
+tools/
+diag/
+diag2/
+smoke/
+.cp.txt
+.cpserver.txt
+*.log
+data/

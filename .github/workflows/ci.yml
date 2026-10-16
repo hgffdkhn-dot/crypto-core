@@ -1,0 +1,209 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  crypto-core:
+    name: Build & test crypto-core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 仓库未提交 gradle-wrapper.jar，因此显式安装 Gradle。
+      # 若你偏好 wrapper：本地执行 `gradle wrapper --gradle-version 8.9` 后，
+      # 可把本步骤替换为 `chmod +x ./gradlew` 并把 gradle 命令换成 ./gradlew。
+      - name: Set up Gradle
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          sudo unzip -q -o -d /opt /tmp/gradle.zip
+          sudo ln -sfn /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle
+          gradle --version
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build and test
+        run: gradle :crypto-core:build --no-daemon --console=plain
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crypto-core-test-report
+          path: crypto-core/build/reports/tests/test
+          if-no-files-found: ignore
+
+  client-core:
+    name: Build & test client-core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          sudo unzip -q -o -d /opt /tmp/gradle.zip
+          sudo ln -sfn /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build and test
+        run: gradle :client-core:build --no-daemon --console=plain
+
+  server:
+    name: Build & test server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          sudo unzip -q -o -d /opt /tmp/gradle.zip
+          sudo ln -sfn /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle
+          gradle --version
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      # 集成测试用 H2 内存库，不需要外部数据库服务。
+      # 但它会真实绑定一个随机端口，Runner 需允许本机回环监听（GitHub-hosted 默认允许）。
+      - name: Build and test
+        run: gradle :server:test --no-daemon --console=plain
+
+      - name: Upload server test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-report
+          path: server/build/reports/tests/test
+          if-no-files-found: ignore
+
+  # 发布服务端可执行包（仅在打 tag 时构建产物，不做部署）
+  server-dist:
+    name: Build server distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [crypto-core, server]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          sudo unzip -q -o -d /opt /tmp/gradle.zip
+          sudo ln -sfn /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle
+
+      - name: Build distribution
+        run: gradle :server:installDist --no-daemon --console=plain
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: enchat-server-dist
+          path: server/build/install/server
+          if-no-files-found: error
+
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [crypto-core, client-core]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          sudo unzip -q -o -d /opt /tmp/gradle.zip
+          sudo ln -sfn /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle
+
+      - name: Cache Gradle caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      # Debug 构建使用占位公钥即可编译通过；
+      # 若要产出可连真实服务器的 APK，请用仓库密钥注入 SERVER_*_PUB_B64。
+      - name: Assemble debug APK
+        run: gradle :app:assembleDebug --no-daemon --console=plain
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: enchat-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

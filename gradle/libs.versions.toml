@@ -1,0 +1,74 @@
+[versions]
+kotlin = "1.9.24"
+bouncycastle = "1.78.1"
+junit = "5.10.2"
+gradle = "8.9"
+ktor = "2.3.12"
+json = "20240303"
+h2 = "2.2.224"
+postgres = "42.7.4"
+hikari = "5.1.0"
+slf4j = "2.0.13"
+coroutines = "1.8.1"
+
+# Android 客户端
+agp = "8.5.2"
+composeBom = "2024.06.00"
+composeCompiler = "1.5.15"
+okhttp = "4.12.0"
+room = "2.6.1"
+datastore = "1.1.1"
+coil = "2.6.0"
+lifecycle = "2.8.3"
+navigationCompose = "2.7.7"
+activityCompose = "1.9.0"
+coreKtx = "1.13.1"
+
+[libraries]
+bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+
+# ---- Ktor 服务端 ----
+ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
+ktor-server-statuspages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
+
+# ---- 数据层 ----
+json = { module = "org.json:json", version.ref = "json" }
+h2 = { module = "com.h2database:h2", version.ref = "h2" }
+postgresql = { module = "org.postgresql:postgresql", version.ref = "postgres" }
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+
+# ---- Android 客户端 ----
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
+androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+compose-ui = { module = "androidx.compose.ui:ui" }
+compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-material3 = { module = "androidx.compose.material3:material3" }
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }
+
+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+android-application = { id = "com.android.application", version.ref = "agp" }
