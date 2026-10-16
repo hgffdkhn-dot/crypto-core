@@ -222,6 +222,37 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
           restore-keys: ${{ runner.os }}-gradle-
 
+      # ⚠️ 关键预检：源码文件若被 .gitignore 静默排除，CI 检出后不会有任何提示，
+      # 只会表现为整包 "Unresolved reference"（曾因 .gitignore 里的裸 `data/` 模式踩过）。
+      # 这里显式列出必须存在的源文件，缺失就立刻失败并给出可复制的排查命令。
+      - name: Verify all source files are present (not gitignored)
+        run: |
+          set -eu
+          MISSING=0
+          for f in \
+            app/src/main/java/com/enchat/app/data/SettingsStore.kt \
+            app/src/main/java/com/enchat/app/data/KeystoreVault.kt \
+            app/src/main/java/com/enchat/app/data/local/Entities.kt \
+            app/src/main/java/com/enchat/app/data/local/Dao.kt \
+            app/src/main/java/com/enchat/app/data/local/AppDatabase.kt \
+            app/src/main/java/com/enchat/app/data/remote/ApiClient.kt \
+            app/src/main/java/com/enchat/app/data/remote/WsClient.kt \
+            app/src/main/java/com/enchat/app/data/remote/Json.kt \
+            app/src/main/java/com/enchat/app/repo/ChatRepository.kt \
+            app/src/main/java/com/enchat/app/di/AppContainer.kt \
+            app/src/main/AndroidManifest.xml ; do
+            if [ ! -f "$f" ]; then echo "::error::缺少源文件 $f"; MISSING=1; fi
+          done
+          if [ "$MISSING" != "0" ]; then
+            echo ""
+            echo "这些文件存在于工作区但没有被提交 —— 多半被 .gitignore 排除了。排查："
+            echo "  git check-ignore -v app/src/main/java/com/enchat/app/data/SettingsStore.kt"
+            echo "  git ls-files app/src/main/java/com/enchat/app/data/"
+            echo "修好后重新提交：git add -A && git commit"
+            exit 1
+          fi
+          echo "源码文件齐全"
+
       # Debug 构建使用占位公钥即可编译通过；
       # 若要产出可连真实服务器的 APK，请用仓库密钥注入 SERVER_*_PUB_B64。
       - name: Assemble debug APK

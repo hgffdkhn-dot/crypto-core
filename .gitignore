@@ -1,21 +1,30 @@
-.gradle/
-build/
+# ⚠️ 目录模式必须加前导 / 锚定到仓库根。
+# 不加 / 的 `data/` 会匹配**任意深度**的 data 目录，
+# 曾把 app/src/main/java/com/enchat/app/data/ 整个源码包静默排除出仓库，
+# CI 检出后 com.enchat.app.data 包不存在，报 "Unresolved reference: data"。
+/.gradle/
+/build/
 */build/
-local.properties
-.idea/
+/local.properties
+/.idea/
 *.iml
 *.ipr
 *.iws
-.kotlin/
+/.kotlin/
 
 # 沙盒离线构建用的本地依赖 jar（体积大，不入库；见 README「离线构建」）
-libs/
-libs2/
-tools/
-diag/
-diag2/
-smoke/
-.cp.txt
-.cpserver.txt
+/libs/
+/libs2/
+/tools/
+/diag/
+/diag2/
+/smoke/
+/.cp.txt
+/.cpserver.txt
 *.log
-data/
+/data/
+
+# 兜底：源码目录永远不忽略（即便某条规则误命中）
+!app/src/main/java/**
+!app/src/main/res/**
+!app/src/main/AndroidManifest.xml

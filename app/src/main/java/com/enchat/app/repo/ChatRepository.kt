@@ -215,7 +215,7 @@ class ChatRepository(
             val spk = SignedPreKey.generate(1, identity)
             val opks = (1..20).map { OneTimePreKey.generate(it) }
             vault.putString(IDENTITY_KEY, vault.seal(identity.toBytes()))
-            vault.putString(SPK_KEY, vault.seal(spk.toStorageBytes()))
+            vault.putString(SPK_KEY, vault.seal(SignedPreKey.toStorageBytes(spk)))
             vault.putString(OPK_KEY, vault.seal(encodeOpks(opks)))
             pendingUpload = Triple(identity, spk, opks)
         } else {
