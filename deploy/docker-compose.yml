@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: enchat
+      POSTGRES_USER: enchat
+      # 从同目录 .env 读取；不要写死在这里
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enchat -d enchat"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    # 不映射端口到宿主机，只在 compose 网络内可达
+    expose:
+      - "5432"
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENCHAT_HOST: 0.0.0.0
+      ENCHAT_PORT: "8080"
+      ENCHAT_JDBC_URL: jdbc:postgresql://db:5432/enchat
+      ENCHAT_DB_USER: enchat
+      ENCHAT_DB_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+      ENCHAT_DB_POOL: "8"
+      # ⚠️ Argon2 的 pepper：一旦上线就绝不能再改，改了所有老用户都无法登录。
+      # 生成：openssl rand -base64 32
+      ENCHAT_PEPPER_B64: ${PEPPER_B64:?请生成：openssl rand -base64 32}
+      ENCHAT_SERVER_KEY_FILE: /var/lib/enchat/keys/server-identity.key
+      ENCHAT_UPLOAD_DIR: /var/lib/enchat/uploads
+      ENCHAT_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      ENCHAT_E2EE_RETENTION_DAYS: "30"
+      JAVA_OPTS: -Xms512m -Xmx1500m -XX:+UseG1GC -Dfile.encoding=UTF-8
+    volumes:
+      # 服务器长期身份密钥 —— 最关键的持久卷，务必备份
+      - serverkeys:/var/lib/enchat/keys
+      - uploads:/var/lib/enchat/uploads
+    ports:
+      # 只监听回环地址，由宿主机上的 Nginx 终止 TLS 后反代进来。
+      # 不要改成 "8080:8080" 直接对外暴露明文 HTTP。
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata:
+  serverkeys:
+  uploads:

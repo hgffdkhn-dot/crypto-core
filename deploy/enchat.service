@@ -1,0 +1,55 @@
+# systemd 单元：不用 Docker 时直接跑服务端。
+#
+# 使用：
+#   sudo cp deploy/enchat.service /etc/systemd/system/
+#   sudo cp deploy/enchat.env /etc/enchat/enchat.env   （并填好密钥）
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now enchat
+#   journalctl -u enchat -f
+
+[Unit]
+Description=EnChat Server
+Documentation=https://github.com/OWNER/REPO
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enchat
+Group=enchat
+
+# installDist 产出的启动脚本；JAVA_OPTS 由 EnvironmentFile 提供
+EnvironmentFile=/etc/enchat/enchat.env
+ExecStart=/opt/enchat/bin/server
+
+WorkingDirectory=/opt/enchat
+Restart=on-failure
+RestartSec=5
+
+# ---------- 加固 ----------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+# 密钥与上传目录需要写权限，其余只读
+ReadWritePaths=/var/lib/enchat/keys /var/lib/enchat/uploads
+# 允许执行必要的系统调用；不启用完整的 SystemCallFilter，避免不同内核上行为差异导致启动失败
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+# ---------- 资源 ----------
+# Argon2id 64 MiB/次 × 并发登录，堆给 1.5g
+LimitNOFILE=65536
+TimeoutStartSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=enchat
+
+[Install]
+WantedBy=multi-user.target
