@@ -1,6 +1,7 @@
 package com.enchat.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -14,6 +15,7 @@ import com.enchat.app.ui.screens.ConversationsScreen
 import com.enchat.app.ui.screens.LoginScreen
 import com.enchat.app.ui.screens.RegisterScreen
 import com.enchat.app.ui.screens.SettingsScreen
+import com.enchat.app.repo.SessionState
 import com.enchat.app.ui.vm.AppViewModelFactory
 import com.enchat.app.ui.vm.AuthViewModel
 import com.enchat.app.ui.vm.ChatViewModel
@@ -36,10 +38,31 @@ private object Route {
 }
 
 @Composable
-fun AppNav(factory: AppViewModelFactory, banner: ConnectionStateMachine.Display, pendingOutbox: Int) {
+fun AppNav(
+    factory: AppViewModelFactory,
+    banner: ConnectionStateMachine.Display,
+    pendingOutbox: Int,
+    /** 启动时本地会话仍有效 → 直接进主界面，不再走登录页。 */
+    startLoggedIn: Boolean = false,
+    /** 当前登录态。运行中被踢下线（令牌失效）时据此跳回登录页。 */
+    sessionState: SessionState = SessionState.LOGGED_IN
+) {
     val navController = rememberNavController()
 
-    androidx.navigation.compose.NavHost(navController = navController, startDestination = Route.LOGIN) {
+    // 运行中被踢下线：令牌过期/被吊销时服务端回 401，这里强制回登录页。
+    // 判断当前目的地，避免与"主动退出登录"的 navigate 重复执行。
+    LaunchedEffect(sessionState) {
+        if (sessionState == SessionState.NOT_LOGGED_IN &&
+            navController.currentDestination?.route != Route.LOGIN
+        ) {
+            navController.navigate(Route.LOGIN) { popUpTo(0) { inclusive = true } }
+        }
+    }
+
+    androidx.navigation.compose.NavHost(
+        navController = navController,
+        startDestination = if (startLoggedIn) Route.CONVERSATIONS else Route.LOGIN
+    ) {
 
         composable(Route.LOGIN) {
             val vm: AuthViewModel = viewModel(factory = factory)

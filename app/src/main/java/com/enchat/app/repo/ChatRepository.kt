@@ -21,6 +21,7 @@ import com.enchat.crypto.E2eeSession
 import com.enchat.crypto.IdentityKeyPair
 import com.enchat.crypto.OneTimePreKey
 import com.enchat.crypto.SignedPreKey
+import com.enchat.protocol.ErrorCode
 import com.enchat.protocol.FrameType
 import com.enchat.protocol.MessageKind
 import com.enchat.protocol.Protocol
@@ -37,6 +38,13 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * 冷启动时的登录态判定结果。
+ *
+ * UNKNOWN 表示"还没读完本地凭据"，UI 应显示启动态而不是急着进主界面或登录页。
+ */
+enum class SessionState { UNKNOWN, LOGGED_IN, NOT_LOGGED_IN }
 
 /**
  * 业务编排层：把 REST、WebSocket、本地库、端到端会话串起来。
@@ -92,6 +100,17 @@ class ChatRepository(
      */
     @Volatile
     private var loggedOut: Boolean = false
+
+    /**
+     * 登录态：冷启动时用于决定进登录页还是直接进主界面。
+     *
+     * 为什么需要这个状态而不是直接读 token：
+     * 从 Keystore / DataStore 读凭据是 I/O，必须异步。若 UI 一开始就假定"已登录"，
+     * 会先闪一下主界面再跳登录页；反过来假定"未登录"就会每次都要重新登录。
+     * 所以让启动流程显式等待这个状态变为确定值。
+     */
+    private val _sessionState = MutableStateFlow(SessionState.UNKNOWN)
+    val sessionState: StateFlow<SessionState> = _sessionState.asStateFlow()
 
     // ---------------- 生命周期 ----------------
 
@@ -150,6 +169,16 @@ class ChatRepository(
         }
 
         scope.launch { restoreIdentityIfNeeded() }
+
+        // 冷启动：本地仍有有效会话就直接恢复，不必重新登录。
+        // 失败（没有 token / 没有 uid）则落到 NOT_LOGGED_IN，UI 跳登录页。
+        scope.launch {
+            _sessionState.value = if (runCatching { resumeIfPossible() }.getOrDefault(false)) {
+                SessionState.LOGGED_IN
+            } else {
+                SessionState.NOT_LOGGED_IN
+            }
+        }
     }
 
     /** 网络恢复时主动重连（由 UI/系统回调触发）。 */
@@ -182,6 +211,10 @@ class ChatRepository(
         // 退出登录时置过 true，重新登录后必须放开自动重连
         failedAttempts = 0
         loggedOut = false
+        // ⚠️ 必须在这里置 LOGGED_IN：AppNav 里监听 sessionState，
+        // 若登录成功后状态仍是 NOT_LOGGED_IN，会被立刻判成"被踢下线"再弹回登录页。
+        _sessionState.value = SessionState.LOGGED_IN
+        _authError.value = null
         ensureIdentityUploaded()
         ws.connect(jsonObjectOf(
             "token" to token,
@@ -203,6 +236,7 @@ class ChatRepository(
             "protocolVersion" to Protocol.VERSION,
             "deviceId" to deviceId()
         ))
+        _sessionState.value = SessionState.LOGGED_IN
         return true
     }
 
@@ -237,6 +271,7 @@ class ChatRepository(
         _pendingOutbox.value = 0
         _authError.value = null
         failedAttempts = 0
+        _sessionState.value = SessionState.NOT_LOGGED_IN
     }
 
     /** 页面销毁/进程退出前调用：关闭连接并擦除传输层密钥。 */
@@ -472,6 +507,61 @@ class ChatRepository(
             FrameType.FRIEND_LIST.code -> onFriendList(frame.optJSONObject("payload") ?: return)
             FrameType.FRIEND_REQUEST_EVENT.code -> onFriendRequestEvent(frame.optJSONObject("payload") ?: return)
             FrameType.GROUP_MEMBER_CHANGE.code -> onGroupMemberChange(frame.optJSONObject("payload") ?: return)
+            FrameType.AUTH_RESULT.code -> onAuthResult(frame.optJSONObject("payload") ?: return)
+            FrameType.ERROR.code -> onErrorFrame(frame.optJSONObject("payload") ?: return)
+        }
+    }
+
+    /**
+     * 鉴权结果。服务端会回 uid 与服务器时间，可用来校正本地缓存的 uid。
+     *
+     * ⚠️ 只有 ok=true 才算真正鉴权通过。原来这里完全没处理 AUTH_RESULT，
+     * 于是鉴权失败（token 过期/被吊销）时连接照样显示"已连接"，
+     * 但后续所有业务请求都会 401 —— 用户看到的是一个"什么都做不了但不报错"的假在线状态。
+     */
+    private fun onAuthResult(payload: JSONObject) {
+        if (!payload.optBoolean("ok", false)) {
+            forceRelogin(payload.optString("msg").ifBlank { "登录已失效，请重新登录" })
+            return
+        }
+        val uid = payload.optLong("uid")
+        if (uid != 0L && uid != selfUid) {
+            selfUid = uid
+            scope.launch { settings.setSelfUid(uid) }
+        }
+    }
+
+    private fun onErrorFrame(payload: JSONObject) {
+        val err = payload.optInt("err", -1)
+        // 401：令牌过期/被吊销/服务端会话被清空。
+        // 本地 token 还在，但服务端不认 —— 必须踢回登录页，
+        // 否则会一直"已登录"却所有操作失败，且重连循环永不停止。
+        if (err == ErrorCode.UNAUTHORIZED.code) {
+            forceRelogin(payload.optString("msg").ifBlank { "登录已失效，请重新登录" })
+        }
+    }
+
+    /**
+     * 强制回到未登录态（令牌失效时）。
+     *
+     * 不复用 logout()：那会去调服务端的 logout 接口，而此刻令牌已经无效，
+     * 只会多一次必然失败的网络请求。
+     */
+    private fun forceRelogin(reason: String) {
+        loggedOut = true
+        ws.close(forgetAuth = true)
+        vault.wipe()
+        e2eeSessions.clear()
+        selfUid = 0
+        selfUserId = 0
+        _e2eeEnabledUids.value = emptySet()
+        _pendingOutbox.value = 0
+        _authError.value = reason
+        _sessionState.value = SessionState.NOT_LOGGED_IN
+        // 清库是 I/O，放到后台；即使失败也不影响"回到登录页"这个主要目标
+        scope.launch {
+            runCatching { settings.clearSession() }
+            runCatching { db.clearAll() }
         }
     }
 

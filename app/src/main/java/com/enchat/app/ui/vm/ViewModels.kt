@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -312,6 +313,16 @@ class SettingsViewModel(
     val nickname = settings.nickname.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     val signature = settings.signature.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     val avatarUrl = settings.avatarUrl.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    /**
+     * 自己的 UID（9 位补零展示）。
+     *
+     * 用 map + stateIn 而不是在 UI 里直接 format：格式化规则属于数据层约定，
+     * 且这里是 Flow 到 StateFlow 的转换，放 VM 里能让 UI 只管渲染。
+     */
+    val uidDisplay: StateFlow<String> = settings.selfUid
+        .map { if (it == 0L) "" else Protocol.formatUid(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
     val themeMode = settings.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     val notifyEnabled = settings.notifyEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val notifySound = settings.notifySound.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)

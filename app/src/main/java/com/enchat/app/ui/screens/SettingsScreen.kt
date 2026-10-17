@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,7 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.ClipData
+import android.content.Context
+import android.widget.Toast
 import com.enchat.app.ui.components.Avatar
 import com.enchat.app.ui.vm.SettingsViewModel
 
@@ -56,6 +61,13 @@ fun SettingsScreen(
     val nickname by vm.nickname.collectAsStateWithLifecycle()
     val signature by vm.signature.collectAsStateWithLifecycle()
     val avatarUrl by vm.avatarUrl.collectAsStateWithLifecycle()
+    val uidDisplay by vm.uidDisplay.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+    // getSystemService 在某些定制 ROM 上可能返回 null，用 as? 避免直接 NPE
+    val clipboard = remember(context) {
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+    }
     val themeMode by vm.themeMode.collectAsStateWithLifecycle()
     val notifyEnabled by vm.notifyEnabled.collectAsStateWithLifecycle()
     val notifySound by vm.notifySound.collectAsStateWithLifecycle()
@@ -102,6 +114,27 @@ fun SettingsScreen(
                 leadingContent = { Avatar(url = avatarUrl, name = nickname, size = 44) },
                 headlineContent = { Text(nickname.ifBlank { "未设置昵称" }) },
                 supportingContent = { Text(signature.ifBlank { "点击修改昵称、签名与头像" }, maxLines = 1) }
+            )
+            // UID：别人加好友时的唯一标识，需要能直接看到并复制
+            ListItem(
+                modifier = Modifier.clickable {
+                    if (uidDisplay.isNotBlank()) {
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("UID", uidDisplay))
+                        Toast.makeText(context, "UID 已复制", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                headlineContent = { Text("UID") },
+                supportingContent = { Text(uidDisplay.ifBlank { "未登录" }) },
+                trailingContent = {
+                    if (uidDisplay.isNotBlank()) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = "复制 UID",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             )
             HorizontalDivider(thickness = 0.5.dp)
 

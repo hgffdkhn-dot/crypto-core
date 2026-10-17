@@ -78,6 +78,11 @@ class SettingsStore(private val context: Context) {
     suspend fun setKeepDays(v: Int) = write<Int>(Keys.KEEP_DAYS, v)
     suspend fun setLastSyncSeq(v: Long) = write<Long>(Keys.LAST_SYNC_SEQ, v)
 
+    /** 仅更新自己的 UID（服务端鉴权回包与本地不一致时校正）。 */
+    suspend fun setSelfUid(uid: Long) {
+        context.settingsDataStore.edit { p -> p[Keys.SELF_UID] = uid }
+    }
+
     suspend fun setSelf(uid: Long, userId: Long, nickname: String, avatarUrl: String) {
         context.settingsDataStore.edit { p ->
             p[Keys.SELF_UID] = uid
