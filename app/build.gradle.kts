@@ -15,11 +15,17 @@ android {
         versionCode = 1
         versionName = "0.2.0"
 
-        // 服务器长期公钥（服务端首次启动时打印）。
-        // 生产环境应改为 gradle 变量/构建时注入，切勿长期放在 VCS 里的默认值。
-        buildConfigField("String", "DEFAULT_HOST", "\"http://10.0.2.2:8080\"") // 模拟器访问宿主机
-        buildConfigField("String", "SERVER_ED25519_PUB_B64", "\"REPLACE_WITH_YOUR_SERVER_KEY\"")
-        buildConfigField("String", "SERVER_X25519_PUB_B64", "\"REPLACE_WITH_YOUR_SERVER_KEY\"")
+        // ⚠️ 服务器长期公钥（首次启动时由服务端生成并打印）。
+        //   必须与目标服务器上 /var/lib/enchat/keys/server-identity.key 对应，
+        //   否则客户端握手时 pin 校验失败，表现为一直显示「连接中…」。
+        //   换服务器 / 密钥文件丢失重建后，必须同步更新这里并重新发布客户端。
+        buildConfigField("String", "SERVER_ED25519_PUB_B64", "\"sci64uPNph+ql/Xi+upQdQRF1DuP3PflczCZVrI9G6Q=\"")
+        buildConfigField("String", "SERVER_X25519_PUB_B64", "\"id+vFwFJbctVUeBhZsSmSf22HjhmOCSATGrDO567s10=\"")
+
+        // 默认服务器地址（已配好 TLS：server.servebeer.com）
+        // 注意：清单里 usesCleartextTraffic=false，明文 http 会被系统拒绝，
+        // 所以这里必须是 https。
+        buildConfigField("String", "DEFAULT_HOST", "\"https://server.servebeer.com\"")
     }
 
     buildTypes {

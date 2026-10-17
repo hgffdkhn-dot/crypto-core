@@ -236,6 +236,14 @@ class IntegrationTest {
     }
 
     @Test
+    fun `unauthorized request returns http 401 not 400`() {
+        // 回归测试：StatusPages 曾把所有 ApiError 一律返回 400，
+        // 导致「未登录」和「参数错误」在 HTTP 层无法区分。
+        val c = newUser()
+        val r = c.getNoAuth("/api/v1/me")
+        assertEquals(401, r.statusCode(), "未带令牌访问 /me 应返回 401，实际 ${r.statusCode()}")
+    }
+
     fun `letter based passwords are accepted and stored safely`() {
         val name = "u" + UUID.randomUUID().toString().replace("-", "").take(10)
         val c = TestClient(baseUrl, serverStatic)

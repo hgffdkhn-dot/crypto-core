@@ -58,6 +58,16 @@ class TestClient(
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }
 
+    /** 不带 Authorization 头发一次 GET，用于验证未鉴权的 HTTP 状态码。 */
+    fun getNoAuth(path: String): HttpResponse<String> =
+        http.send(
+            HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .timeout(Duration.ofSeconds(30))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString()
+        )
+
     fun register(username: String, password: String, nickname: String = username): JSONObject {
         val res = request("POST", "/api/v1/auth/register", JSONObject()
             .put("username", username).put("password", password).put("nickname", nickname))
