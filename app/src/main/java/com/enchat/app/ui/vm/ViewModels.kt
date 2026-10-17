@@ -348,10 +348,24 @@ class SettingsViewModel(
     fun setKeepDays(v: Int) = viewModelScope.launch { settings.setKeepDays(v) }
     fun setHost(v: String) = viewModelScope.launch { settings.setHost(v) }
 
+    /**
+     * 退出登录。
+     *
+     * ⚠️ 必须 try/catch：repo.logout() 里涉及网络、Keystore、Room 清库，
+     * 任一环节抛异常若未捕获会直接冒泡到主线程导致进程崩溃 ——
+     * 原来的写法正是这样，表现为"点了退出登录 App 直接关闭"。
+     *
+     * 失败时保留在设置页并提示，用户可重试；不会因为清了一半而卡死。
+     */
     fun logout(onDone: () -> Unit) {
         viewModelScope.launch {
-            repo.logout()
-            onDone()
+            _message.value = null
+            try {
+                repo.logout()
+                onDone()
+            } catch (e: Exception) {
+                _message.value = "退出登录失败：${e.message ?: "未知错误"}"
+            }
         }
     }
 }

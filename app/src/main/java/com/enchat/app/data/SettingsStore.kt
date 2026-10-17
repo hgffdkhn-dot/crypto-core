@@ -121,11 +121,26 @@ class SettingsStore(private val context: Context) {
     suspend fun hasSeenIntro(uid: Long): Boolean =
         (context.settingsDataStore.data.first()[Keys.E2EE_INTRO_SEEN_UIDS] ?: emptySet<String>()).contains(uid.toString())
 
+    /**
+     * 清除"当前账号"相关的一切状态。
+     *
+     * ⚠️ 原来只删了 SELF_UID / SELF_USER_ID / LAST_SYNC_SEQ，漏掉了昵称、头像、
+     * 签名以及两个 E2EE 相关集合 —— 换账号登录后会残留上一个账号的资料，
+     * 且"已看过端到端介绍"的标记会让新账号不再弹说明。
+     *
+     * 刻意**不清** HOST / 主题 / 通知等：那些是设备偏好，不属于账号状态，
+     * 换账号时保留更符合直觉。
+     */
     suspend fun clearSession() {
         context.settingsDataStore.edit { p ->
             p.remove(Keys.SELF_UID)
             p.remove(Keys.SELF_USER_ID)
             p.remove(Keys.LAST_SYNC_SEQ)
+            p.remove(Keys.NICKNAME)
+            p.remove(Keys.AVATAR_URL)
+            p.remove(Keys.SIGNATURE)
+            p.remove(Keys.E2EE_ENABLED_UIDS)
+            p.remove(Keys.E2EE_INTRO_SEEN_UIDS)
         }
     }
 

@@ -83,6 +83,16 @@ class ChatRepository(
     private var selfUid: Long = 0
     private var selfUserId: Long = 0
 
+    /**
+     * 是否已退出登录。
+     *
+     * 退出登录后 ws 会变成 IDLE，若不设这个标志，自动重连逻辑会立刻用已失效的
+     * token 反复尝试连接（甚至形成 close→IDLE→reconnect→失败 的循环）。
+     * 重新登录/注册时重置为 false。
+     */
+    @Volatile
+    private var loggedOut: Boolean = false
+
     // ---------------- 生命周期 ----------------
 
     fun start() {
@@ -116,8 +126,10 @@ class ChatRepository(
                         }
                     }
                     LinkState.FAILED, LinkState.IDLE, LinkState.CONNECTING -> {
-                        // 只有"有网"才值得重连；无网时等网络回来再试
-                        if (networkMonitor.available.value) {
+                        // 只有"有网"才值得重连；无网时等网络回来再试。
+                        // ⚠️ 退出登录后必须停手：ws.close() 会把状态置为 IDLE，
+                        // 若不判断 loggedOut，这里会立刻拿已失效的 token 反复重连。
+                        if (!loggedOut && ws.hasAuth() && networkMonitor.available.value) {
                             val delayMs = reconnect.nextDelayMs(failedAttempts++)
                             ws.reconnectAfter(delayMs)
                         }
@@ -143,7 +155,8 @@ class ChatRepository(
     /** 网络恢复时主动重连（由 UI/系统回调触发）。 */
     fun onNetworkBack() {
         networkMonitor.refresh()
-        if (!ws.isLinked() && networkMonitor.available.value) {
+        // 已退出登录或没有凭据时不重连，否则会拿失效 token 反复尝试
+        if (!loggedOut && ws.hasAuth() && !ws.isLinked() && networkMonitor.available.value) {
             failedAttempts = 0
             ws.reconnectAfter(0)
         }
@@ -166,6 +179,9 @@ class ChatRepository(
         settings.setSelf(uid, userId, nickname, avatarUrl)
         selfUid = uid
         selfUserId = userId
+        // 退出登录时置过 true，重新登录后必须放开自动重连
+        failedAttempts = 0
+        loggedOut = false
         ensureIdentityUploaded()
         ws.connect(jsonObjectOf(
             "token" to token,
@@ -180,6 +196,7 @@ class ChatRepository(
         selfUid = settings.selfUid.first()
         selfUserId = settings.selfUserId()
         if (selfUserId == 0L) return false
+        loggedOut = false
         restoreIdentityIfNeeded()
         ws.connect(jsonObjectOf(
             "token" to token,
@@ -189,13 +206,37 @@ class ChatRepository(
         return true
     }
 
+    /**
+     * 退出登录：吊销服务端会话 + 清空本地所有凭据与缓存。
+     *
+     * ⚠️ 顺序与线程都很关键，踩过的坑都写在注释里：
+     * 1. 先置 loggedOut，阻止 ws.close() 触发的自动重连（close 会把状态置为 IDLE）。
+     * 2. 网络调用本身已在 ApiClient 内切 IO，这里不重复切。
+     * 3. db.clearAll() 内部已切到 Dispatchers.IO —— Room 的 clearAllTables() 是
+     *    非 suspend 方法且会 assertNotMainThread，在主线程调用会直接崩。
+     * 4. 清库放在最后：先清凭据再清数据，避免中途失败留下"有数据无凭据"的半状态。
+     */
     suspend fun logout() {
-        try { api.logout() } catch (_: Exception) { /* 退出登录失败也要清本地 */ }
-        ws.close()
+        loggedOut = true
+        try {
+            api.logout()
+        } catch (_: Exception) {
+            // 服务端吊销失败也要清本地，否则用户永远退不出去
+        }
+
+        // forgetAuth=true：退出登录必须丢弃鉴权快照，否则上层自动重连会拿失效 token 反复尝试
+        ws.close(forgetAuth = true)
         vault.wipe()
         settings.clearSession()
         db.clearAll()
+
         e2eeSessions.clear()
+        selfUid = 0
+        selfUserId = 0
+        _e2eeEnabledUids.value = emptySet()
+        _pendingOutbox.value = 0
+        _authError.value = null
+        failedAttempts = 0
     }
 
     /** 页面销毁/进程退出前调用：关闭连接并擦除传输层密钥。 */
@@ -603,7 +644,14 @@ class ChatRepository(
     }
 
     companion object {
-        private const val TOKEN_KEY = "access_token"
+        /**
+         * 令牌在 KeystoreVault 里的键名。
+         *
+         * ⚠️ 原来是 private，而 AppContainer 里另写了一份字面量 "access_token"。
+         * 两处各写一遍，改名时极易只改一边 —— 那会导致 tokenProvider 永远取到 null，
+         * 表现为"登录成功但连不上"。统一引用同一常量，消除这类静默不一致。
+         */
+        const val TOKEN_KEY = "access_token"
         private const val IDENTITY_KEY = "identity_sealed"
         private const val SPK_KEY = "spk_sealed"
         private const val OPK_KEY = "opk_sealed"

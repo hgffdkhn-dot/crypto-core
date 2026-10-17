@@ -52,7 +52,9 @@ android {
     }
     composeOptions {
         // ⚠️ Compose Compiler 必须与 Kotlin 版本严格对应：
-        // Kotlin 1.9.24 ↔ Compose Compiler 1.5.15。升级 Kotlin 时务必同步查官方兼容表。
+        // Kotlin 1.9.25 ↔ Compose Compiler 1.5.15（见 gradle/libs.versions.toml）。
+        // 升级 Kotlin 时务必同步查官方兼容表：
+        // https://developer.android.com/jetpack/androidx/releases/compose-kotlin
         kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
     packaging {

@@ -169,12 +169,25 @@ class WsClient(
         }
     }
 
-    fun close() {
+    /**
+     * 关闭连接。
+     *
+     * @param forgetAuth 是否一并丢弃鉴权快照。
+     *   - `false`（默认）：仅断开链路，保留 pendingAuth，供 Activity 因配置变更
+     *     （旋转屏幕等）销毁后自动重连。**不要**在这里清 auth，否则转个屏就再也连不上。
+     *   - `true`：退出登录时调用。此时 token 已被清除，若留着旧快照，
+     *     上层的自动重连会拿失效凭据反复尝试，形成 close→IDLE→reconnect→失败 的循环。
+     */
+    fun close(forgetAuth: Boolean = false) {
         session?.zeroize()
         session = null
+        if (forgetAuth) pendingAuth = null
         runCatching { socket?.close(1000, "bye") }
         _linkState.value = LinkState.IDLE
     }
+
+    /** 已持有可用鉴权凭据（用于判断是否值得重连）。 */
+    fun hasAuth(): Boolean = pendingAuth != null
 
     companion object {
         /**

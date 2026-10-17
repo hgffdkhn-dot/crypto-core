@@ -58,14 +58,14 @@ class AppContainer(context: Context) {
             wsFactory = {
                 WsClient(
                     hostProvider = { host() },
-                    tokenProvider = { vault.getString("access_token") },
+                    tokenProvider = { vault.getString(ChatRepository.TOKEN_KEY) },
                     staticKeysProvider = { WsClient.pinnedKeys() }
                 )
             },
             apiFactory = {
                 ApiClient(
                     baseUrl = host(),
-                    tokenProvider = { vault.getString("access_token") }
+                    tokenProvider = { vault.getString(ChatRepository.TOKEN_KEY) }
                 )
             },
             scope = appScope
